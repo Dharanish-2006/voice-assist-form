@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aadhaar Voice Application</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+  <main class="bg-white rounded-lg shadow-lg max-w-md w-full p-6 sm:p-8">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-4 text-center">
+      Aadhaar Application - Voice Guide
+    </h1>
+    <p id="instruction" class="text-gray-600 mb-6 text-center">
+      Please choose your preferred language / உங்கள் மொழியை தெரிவுசெய்க
+    </p>
+
+    <!-- Language Selection -->
+    <div id="langSelect" class="flex flex-col space-y-3">
+      <button data-lang="ta-IN" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-md hover:bg-indigo-700 transition-colors">
+        தமிழ் (Tamil)
+      </button>
+      <button data-lang="en-IN" class="w-full bg-green-600 text-white font-semibold py-3 rounded-md hover:bg-green-700 transition-colors">
+        English
+      </button>
+    </div>
+
+    <!-- Aadhaar Form -->
+    <form id="aadhaarForm" class="space-y-5 mt-6 hidden" novalidate>
+      <div>
+        <label for="fullName" class="block text-gray-700 font-semibold mb-1">Full Name:</label>
+        <input type="text" id="fullName" name="fullName" required class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" autocomplete="name" />
+      </div>
+
+      <div>
+        <label for="dob" class="block text-gray-700 font-semibold mb-1">Date of Birth:</label>
+        <input type="date" id="dob" name="dob" required class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" max="" />
+      </div>
+
+      <div>
+        <label for="gender" class="block text-gray-700 font-semibold mb-1">Gender:</label>
+        <select id="gender" name="gender" required class="w-full border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="" disabled selected>Select Gender</option>
+          <option value="Male">Male / ஆண்</option>
+          <option value="Female">Female / பெண்</option>
+          <option value="Other">Other / மற்றவை</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="address" class="block text-gray-700 font-semibold mb-1">Address:</label>
+        <input type="text" id="address" name="address" required class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" autocomplete="street-address" />
+      </div>
+
+      <div>
+        <label for="mobile" class="block text-gray-700 font-semibold mb-1">Mobile Number:</label>
+        <input type="tel" id="mobile" name="mobile" required pattern="[0-9]{10}" maxlength="10" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" inputmode="numeric" placeholder="10 digits" />
+      </div>
+
+      <div>
+        <label for="email" class="block text-gray-700 font-semibold mb-1">Email (Optional):</label>
+        <input type="email" id="email" name="email" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" autocomplete="email" placeholder="example@example.com" />
+      </div>
+
+      <button type="submit" disabled id="submitBtn" class="w-full bg-indigo-600 text-white font-semibold py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors">
+        Submit
+      </button>
+
+      <div id="status" class="mt-4 text-center text-gray-700 italic min-h-[1.5rem]" aria-live="polite"></div>
+    </form>
+  </main>
+
+<script>
+const instruction = document.getElementById('instruction');
+const langSelect = document.getElementById('langSelect');
+const form = document.getElementById('aadhaarForm');
+const submitBtn = document.getElementById('submitBtn');
+const statusDiv = document.getElementById('status');
+const dobInput = document.getElementById('dob');
+dobInput.max = new Date().toISOString().split('T')[0];
+
+let currentLang = "ta-IN";
+let fields = [];
+let index = 0;
+let isListening = false;
+
+// Prompts for both languages (slang, casual style)
+const fieldPrompts = {
+  "ta-IN":[
+    {id:'fullName', prompt:'உங்க பெயர் சொல்லுங்க'},
+    {id:'dob', prompt:'உங்க பிறந்த தேதி சொல்லுங்க. உதாரணம் 1998 ஜூலை 5'},
+    {id:'gender', prompt:'நீங்க ஆணா, பெண்ணா அல்லது மற்றவையா சொல்லுங்க'},
+    {id:'address', prompt:'உங்க முகவரி சொல்லுங்க'},
+    {id:'mobile', prompt:'உங்க 10 இலக்க மொபைல் நம்பரை சொல்லுங்க'},
+    {id:'email', prompt:'உங்க மெயில் அட்ரஸ் சொல்லுங்க. இல்லனா skip சொல்லுங்க'}
+  ],
+  "en-IN":[
+    {id:'fullName', prompt:'Tell me your name'},
+    {id:'dob', prompt:'Say your date of birth, like 1998 July 5'},
+    {id:'gender', prompt:'Are you Male, Female or Other?'},
+    {id:'address', prompt:'Tell me your address'},
+    {id:'mobile', prompt:'Say your 10 digit mobile number'},
+    {id:'email', prompt:'Say your email address, or say skip'}
+  ]
+};
+
+// Speech recognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+if(recognition){
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+}
+
+// Speech synthesis
+function speak(text, callback){
+  if(!window.speechSynthesis){ callback(); return; }
+  if(speechSynthesis.speaking){ speechSynthesis.cancel(); }
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang=currentLang;
+  utter.rate=0.95;
+  utter.onend=callback;
+  utter.onerror=callback;
+  speechSynthesis.speak(utter);
+}
+
+// DOB parser
+function parseDate(text) {
+  if (!text) return null;
+  text = text.toLowerCase().trim();
+
+  const monthsTa = {
+    'ஜனவரி':'01','பிப்ரவரி':'02','மார்ச்':'03','ஏப்ரல்':'04','மே':'05',
+    'ஜூன்':'06','ஜூலை':'07','ஆகஸ்ட்':'08','செப்டம்பர்':'09','அக்டோபர்':'10',
+    'நவம்பர்':'11','டிசம்பர்':'12'
+  };
+  const monthsEn = {
+    'january':'01','feb':'02','february':'02','march':'03','apr':'04','april':'04','may':'05',
+    'june':'06','july':'07','aug':'08','august':'08','sept':'09','september':'09',
+    'oct':'10','october':'10','nov':'11','november':'11','dec':'12','december':'12'
+  };
+
+  // dd-mm-yyyy / dd/mm/yyyy
+  let dmy = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+
+  // yyyy-mm-dd / yyyy/mm/dd
+  let ymd = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymd) return `${ymd[1]}-${ymd[2].padStart(2,'0')}-${ymd[3].padStart(2,'0')}`;
+
+  // 5 July 1998 / 5 ஜூலை 1998
+  let dMonthY = text.match(/(\d{1,2})\s+([a-zஅ-ஹ]+)\s+(\d{4})/);
+  if (dMonthY) {
+    let day = dMonthY[1].padStart(2,'0');
+    let monthWord = dMonthY[2];
+    let year = dMonthY[3];
+    let month = monthsEn[monthWord] || monthsTa[monthWord];
+    if (month) return `${year}-${month}-${day}`;
+  }
+
+  // 1998 July 5 / 1998 ஜூலை 5
+  let yMonthD = text.match(/(\d{4})\s+([a-zஅ-ஹ]+)\s+(\d{1,2})/);
+  if (yMonthD) {
+    let year = yMonthD[1];
+    let monthWord = yMonthD[2];
+    let day = yMonthD[3].padStart(2,'0');
+    let month = monthsEn[monthWord] || monthsTa[monthWord];
+    if (month) return `${year}-${month}-${day}`;
+  }
+  return null;
+}
+
+// Listening
+function listen(callback){
+  if(!recognition){ callback(null); return; }
+  if(isListening){ recognition.stop(); }
+  isListening=true;
+  recognition.lang=currentLang;
+  recognition.start();
+
+  recognition.onresult=(event)=>{
+    isListening=false;
+    const speech=event.results[0][0].transcript.trim().toLowerCase();
+    callback(speech);
+  };
+
+  recognition.onerror=()=>{ isListening=false; callback(null); };
+  recognition.onend=()=>{ if(isListening) recognition.start(); };
+}
+
+// Next question
+function nextQuestion(){
+  if(index>=fields.length){
+    speak(currentLang==="ta-IN" ? "விண்ணப்பம் முடிந்தது. சமர்ப்பிக்கிறோம்." : "Application completed. Submitting now.",()=>{
+      submitBtn.disabled=false;
+      form.requestSubmit();
+    });
+    return;
+  }
+  const field=fields[index];
+  const input=document.getElementById(field.id);
+
+  speak(field.prompt, ()=>{
+    listen((speech)=>{
+      if(!speech){ speak(currentLang==="ta-IN" ? "மீண்டும் சொல்லுங்க" : "Please repeat", nextQuestion); return; }
+
+      if(field.id==='dob'){
+        const parsed=parseDate(speech);
+        if(parsed){ input.value=parsed; index++; nextQuestion(); }
+        else{ speak(currentLang==="ta-IN" ? "உதாரணம் 1998 ஜூலை 5 சொல்லுங்க" : "Say like 1998 July 5", nextQuestion); }
+        return;
+      }
+
+      if(field.id==='gender'){
+        if(speech.includes('male') || speech.includes('ஆண்')) input.value='Male';
+        else if(speech.includes('female') || speech.includes('பெண்')) input.value='Female';
+        else if(speech.includes('other') || speech.includes('மற்ற')) input.value='Other';
+        else { speak(currentLang==="ta-IN" ? "ஆண், பெண் அல்லது மற்றவை சொல்லுங்க" : "Say Male, Female or Other", nextQuestion); return; }
+        index++; nextQuestion(); return;
+      }
+
+      if(field.id==='mobile'){
+        const digits=speech.replace(/\D/g,'');
+        if(digits.length===10){ input.value=digits; index++; nextQuestion(); }
+        else{ speak(currentLang==="ta-IN" ? "10 இலக்க நம்பரை சொல்லுங்க" : "Say 10 digit number", nextQuestion); }
+        return;
+      }
+
+      if(field.id==='email'){
+        if(speech.includes('skip') || speech.includes('கடந்து')) input.value='';
+        else{
+          let email=speech.replace(/ at /g,'@').replace(/ dot /g,'.').replace(/\s/g,'');
+          input.value=email;
+        }
+        index++; nextQuestion(); return;
+      }
+
+      input.value=speech.charAt(0).toUpperCase()+speech.slice(1);
+      index++; nextQuestion();
+    });
+  });
+}
+
+// Form submission
+form.addEventListener('submit',(e)=>{
+  e.preventDefault();
+  submitBtn.disabled=true;
+  statusDiv.textContent=currentLang==="ta-IN" ? "விண்ணப்பம் சமர்ப்பிக்கப்படுகிறது..." : "Submitting application...";
+  const data=Object.fromEntries(new FormData(form).entries());
+  setTimeout(()=>{
+    speak(currentLang==="ta-IN" ? "விண்ணப்பம் வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது" : "Application submitted successfully");
+    statusDiv.textContent=currentLang==="ta-IN" ? "வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது" : "Successfully submitted";
+    submitBtn.disabled=false;
+  },2000);
+});
+
+// Language selection
+langSelect.querySelectorAll("button").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    currentLang = btn.getAttribute("data-lang");
+    fields = fieldPrompts[currentLang];
+    langSelect.classList.add("hidden");
+    instruction.classList.add("hidden");
+    form.classList.remove("hidden");
+    document.getElementById('fullName').focus();
+    speak(currentLang==="ta-IN" ? "ஆதார் விண்ணப்பத்திற்கு வரவேற்கிறோம். ஆரம்பிக்கலாம்." : "Welcome to Aadhaar Application. Let's begin.", nextQuestion);
+  });
+});
+</script>
+</body>
+</html>

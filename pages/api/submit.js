@@ -1,33 +1,27 @@
-import mongoose from "mongoose";
+// pages/api/submit.js
+import connectToDatabase from "../../lib/mongodb";
+import Form from "../../models/Form";
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
-// Connect to MongoDB
-async function connectDB() {
-  if (mongoose.connection.readyState >= 1) return;
-  return mongoose.connect(MONGODB_URI);
-}
-
-// Define schema
-const FormSchema = new mongoose.Schema({
-  name: String,
-  email: String,
-  message: String,
-});
-const Form = mongoose.models.Form || mongoose.model("Form", FormSchema);
-
-// API Route
 export default async function handler(req, res) {
-  if (req.method === "POST") {
-    try {
-      await connectDB();
-      const newForm = new Form(req.body);
-      await newForm.save();
-      res.status(201).json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save form" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  try {
+    await connectToDatabase();
+
+    const { name, email, message } = req.body;
+
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: "All fields are required" });
     }
-  } else {
-    res.status(405).json({ error: "Method not allowed" });
+
+    const newForm = new Form({ name, email, message });
+    await newForm.save();
+
+    return res.status(200).json({ message: "Form submitted successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Server error" });
   }
 }
