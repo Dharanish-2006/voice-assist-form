@@ -8,19 +8,19 @@ export default function VoiceForm() {
   const recognitionRef = useRef(null);
   const fields = ["name", "phone", "message"];
 
-  // Only define SpeechRecognition on the client
-  const getSpeechRecognition = () =>
+  const getSR = () =>
     typeof window !== "undefined"
       ? window.SpeechRecognition || window.webkitSpeechRecognition
       : null;
 
-  const speak = (text) => {
+  const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
     if (!synth) return;
     synth.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "en-US";
+    if (cb) utter.onend = cb;
     synth.speak(utter);
     setStatus(text);
   };
@@ -32,9 +32,9 @@ export default function VoiceForm() {
   };
 
   const startListening = () => {
-    const SR = getSpeechRecognition();
+    const SR = getSR();
     if (!SR) {
-      speak("Speech recognition is not supported in this browser.");
+      speak("Speech recognition not supported.");
       return;
     }
 
@@ -46,13 +46,13 @@ export default function VoiceForm() {
     setActiveField(fields[step]);
     speak(`Please say your ${fields[step]}`);
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript.trim();
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript.trim();
       handleResult(transcript);
     };
 
     recognition.onend = () => {
-      // Do nothing here to prevent infinite loop
+      recognitionRef.current = null;
     };
 
     recognition.start();
@@ -68,20 +68,26 @@ export default function VoiceForm() {
       return;
     }
 
+    // Save the value
     setForm((prev) => ({ ...prev, [field]: value }));
-    speak(`${field} set to ${value}`);
 
-    if (step < 2) setStep((s) => s + 1);
-    else confirmSubmit();
+    // Read back the value
+    speak(`${field} recorded as ${value}`, () => {
+      if (step < 2) {
+        setStep((s) => s + 1); // Move to next field
+        startListening(); // start listening for next field
+      } else {
+        confirmSubmit(); // All fields done, go to confirmation
+      }
+    });
   };
 
   const confirmSubmit = () => {
     setActiveField("");
-    speak(
-      `You entered: Name: ${form.name}, Phone: ${form.phone}, Message: ${form.message}. Say yes to submit or no to cancel.`
-    );
+    const summary = `You entered: Name: ${form.name}, Phone: ${form.phone}, Message: ${form.message}. Say yes to submit or no to cancel.`;
+    speak(summary);
 
-    const SR = getSpeechRecognition();
+    const SR = getSR();
     if (!SR) return;
 
     const recognition = new SR();
@@ -89,14 +95,15 @@ export default function VoiceForm() {
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript.toLowerCase().trim();
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript.toLowerCase().trim();
       if (transcript === "yes") handleSubmit();
       else if (transcript === "no") {
-        speak("Form cancelled. Restarting.");
-        setForm({ name: "", phone: "", message: "" });
-        setStep(0);
-        startListening();
+        speak("Form cancelled. Restarting.", () => {
+          setForm({ name: "", phone: "", message: "" });
+          setStep(0);
+          startListening();
+        });
       } else {
         speak("Please say yes or no.", confirmSubmit);
       }
@@ -115,8 +122,7 @@ export default function VoiceForm() {
   };
 
   useEffect(() => {
-    // Start voice input after component mounts
-    startListening();
+    startListening(); // Start first field
   }, []);
 
   return (
