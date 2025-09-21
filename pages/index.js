@@ -5,12 +5,10 @@ export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [step, setStep] = useState(0);
   const [listeningField, setListeningField] = useState(null);
-  const [started, setStarted] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
 
   const formRef = useRef(form);
   const stepRef = useRef(step);
-  const startedRef = useRef(started);
   const retryRef = useRef(0);
   const recognitionRef = useRef(null);
 
@@ -20,7 +18,6 @@ export default function VoiceForm() {
   // keep refs in sync
   useEffect(() => { formRef.current = form; }, [form]);
   useEffect(() => { stepRef.current = step; }, [step]);
-  useEffect(() => { startedRef.current = started; }, [started]);
 
   const speak = (text) => {
     if (typeof window === "undefined") return;
@@ -42,13 +39,9 @@ export default function VoiceForm() {
     return true;
   };
 
-  // 🔑 helper to safely advance step
   const advanceStep = (newStep) => {
     setStep(newStep);
     stepRef.current = newStep;
-    if (process.env.NODE_ENV !== "production") {
-      console.log("Step advanced to:", newStep);
-    }
   };
 
   const promptNextField = (curStep) => {
@@ -141,8 +134,7 @@ export default function VoiceForm() {
       handleFinalTranscript(transcript);
     };
 
-    rec.onerror = (e) => {
-      console.warn("Recognition error:", e.error);
+    rec.onerror = () => {
       speak("There was an error. Please try again.");
       setTimeout(() => startListening(), 500);
     };
@@ -155,7 +147,6 @@ export default function VoiceForm() {
   };
 
   const startListening = () => {
-    if (!startedRef.current) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       speak("Your browser does not support speech recognition.");
@@ -169,9 +160,7 @@ export default function VoiceForm() {
     recognitionRef.current = rec;
     try {
       rec.start();
-    } catch (e) {
-      console.error("rec.start failed", e);
-    }
+    } catch {}
   };
 
   const handleSubmit = async () => {
@@ -186,49 +175,40 @@ export default function VoiceForm() {
     }, 800);
   };
 
-  const handleStart = () => {
-    if (startedRef.current) return;
-    setStarted(true);
-    startedRef.current = true;
-    speak("Welcome! Let's start.");
+  // 🚀 auto-start voice flow when page loads
+  useEffect(() => {
+    speak("Welcome! Let's start filling the form using your voice.");
     setTimeout(() => {
       promptNextField(0);
       startListening();
-    }, 800);
-  };
+    }, 1200);
+  }, []);
 
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light" onClick={handleStart}>
-      {!started ? (
-        <div className="text-center p-5">
-          <h1>🎤 Voice Form</h1>
-          <p>Click to start (microphone required)</p>
-        </div>
-      ) : (
-        <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
-          <h3 className="text-center mb-3">🎤 Voice Form</h3>
+    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
+      <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
+        <h3 className="text-center mb-3">🎤 Voice Form</h3>
 
-          {fields.map((field) => (
-            <div key={field} className="mb-3">
-              <label>{field.toUpperCase()}</label>
-              <input
-                type={field === "email" ? "email" : "text"}
-                value={form[field]}
-                readOnly
-                className={`form-control ${listeningField === field ? "border-success" : ""}`}
-              />
-            </div>
-          ))}
+        {fields.map((field) => (
+          <div key={field} className="mb-3">
+            <label>{field.toUpperCase()}</label>
+            <input
+              type={field === "email" ? "email" : "text"}
+              value={form[field]}
+              readOnly
+              className={`form-control ${listeningField === field ? "border-success" : ""}`}
+            />
+          </div>
+        ))}
 
-          {step === 3 && (
-            <div className="alert alert-info">
-              Confirm: {form.name}, {form.email}, {form.message} — say yes or no
-            </div>
-          )}
+        {step === 3 && (
+          <div className="alert alert-info">
+            Confirm: {form.name}, {form.email}, {form.message} — say yes or no
+          </div>
+        )}
 
-          <div className="small text-muted mt-2">{statusMessage}</div>
-        </div>
-      )}
+        <div className="small text-muted mt-2">{statusMessage}</div>
+      </div>
     </div>
   );
 }
