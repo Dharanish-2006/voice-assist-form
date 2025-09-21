@@ -4,34 +4,23 @@ export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", phone: "", message: "" });
   const [step, setStep] = useState(0); // 0=name,1=phone,2=message,3=confirm
   const [status, setStatus] = useState("");
+  const [activeField, setActiveField] = useState("");
   const recognitionRef = useRef(null);
-  const retryRef = useRef(0);
   const fields = ["name", "phone", "message"];
-  const MAX_RETRIES = 2;
 
-  const beep = () => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      oscillator.start();
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.2);
-      oscillator.stop(ctx.currentTime + 0.2);
-    } catch {}
-  };
+  // Only define SpeechRecognition on the client
+  const getSpeechRecognition = () =>
+    typeof window !== "undefined"
+      ? window.SpeechRecognition || window.webkitSpeechRecognition
+      : null;
 
-  const speak = (text, cb = null) => {
+  const speak = (text) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
     if (!synth) return;
     synth.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "en-US";
-    if (cb) utter.onend = cb;
     synth.speak(utter);
     setStatus(text);
   };
@@ -42,104 +31,92 @@ export default function VoiceForm() {
     return true;
   };
 
-  const promptStep = (s) => {
-    if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
-    else
-      speak(
-        `You entered: Name: ${form.name}, Phone: ${form.phone}, Message: ${form.message}. Say yes to submit or no to cancel.`,
-        startListening
-      );
-  };
-
-  const handleResult = (raw) => {
-    const transcript = raw.toLowerCase().trim();
-
-    if (transcript === "repeat") {
-      promptStep(step);
-      return;
-    }
-
-    if (step < 3) {
-      if (!validateInput(fields[step], transcript)) {
-        if (retryRef.current < MAX_RETRIES) {
-          retryRef.current++;
-          speak(`I didn't catch that. Please repeat your ${fields[step]}.`, startListening);
-          return;
-        } else {
-          retryRef.current = 0;
-          speak(`Skipping ${fields[step]} due to repeated errors.`, () => {
-            setStep((s) => s + 1);
-            promptStep(step + 1);
-          });
-          return;
-        }
-      }
-
-      retryRef.current = 0;
-
-      // For phone, remove non-digits
-      const value = fields[step] === "phone" ? transcript.replace(/\D/g, "") : transcript;
-
-      setForm((prev) => ({ ...prev, [fields[step]]: value }));
-
-      speak(
-        `You said: ${value}. Saving it as your ${fields[step]}.`,
-        () => {
-          setStep((s) => s + 1);
-          promptStep(step + 1);
-        }
-      );
-    } else {
-      if (transcript === "yes") handleSubmit();
-      else if (transcript === "no") {
-        speak("Form submission cancelled. Restarting from beginning.", () => {
-          setForm({ name: "", phone: "", message: "" });
-          setStep(0);
-          promptStep(0);
-        });
-      } else {
-        speak("Please say yes or no.", startListening);
-      }
-    }
-  };
-
   const startListening = () => {
-    if (typeof window === "undefined") return;
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = getSpeechRecognition();
     if (!SR) {
-      speak("Speech recognition not supported in this browser.");
+      speak("Speech recognition is not supported in this browser.");
       return;
     }
-
-    if (recognitionRef.current) recognitionRef.current.stop();
 
     const recognition = new SR();
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = beep;
+    setActiveField(fields[step]);
+    speak(`Please say your ${fields[step]}`);
 
-    recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript.trim();
       handleResult(transcript);
     };
 
-    recognitionRef.current = recognition;
+    recognition.onend = () => {
+      // Do nothing here to prevent infinite loop
+    };
+
     recognition.start();
+    recognitionRef.current = recognition;
+  };
+
+  const handleResult = (input) => {
+    const field = fields[step];
+    const value = field === "phone" ? input.replace(/\D/g, "") : input;
+
+    if (!validateInput(field, value)) {
+      speak(`Invalid ${field}. Please try again.`, startListening);
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, [field]: value }));
+    speak(`${field} set to ${value}`);
+
+    if (step < 2) setStep((s) => s + 1);
+    else confirmSubmit();
+  };
+
+  const confirmSubmit = () => {
+    setActiveField("");
+    speak(
+      `You entered: Name: ${form.name}, Phone: ${form.phone}, Message: ${form.message}. Say yes to submit or no to cancel.`
+    );
+
+    const SR = getSpeechRecognition();
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript.toLowerCase().trim();
+      if (transcript === "yes") handleSubmit();
+      else if (transcript === "no") {
+        speak("Form cancelled. Restarting.");
+        setForm({ name: "", phone: "", message: "" });
+        setStep(0);
+        startListening();
+      } else {
+        speak("Please say yes or no.", confirmSubmit);
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
   };
 
   const handleSubmit = () => {
-    speak("Form submitted successfully!", () => {
-      alert("Form submitted:\n" + JSON.stringify(form, null, 2));
-      setForm({ name: "", phone: "", message: "" });
-      setStep(0);
-      promptStep(0);
-    });
+    speak("Form submitted successfully!");
+    alert("Form submitted:\n" + JSON.stringify(form, null, 2));
+    setForm({ name: "", phone: "", message: "" });
+    setStep(0);
+    startListening();
   };
 
   useEffect(() => {
-    speak("Welcome! Let's fill your form using voice.", promptStep.bind(null, 0));
+    // Start voice input after component mounts
+    startListening();
   }, []);
 
   return (
@@ -147,20 +124,19 @@ export default function VoiceForm() {
       <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
         <h3 className="text-center mb-3">🎤 Voice Form</h3>
 
-        <div className="mb-3">
-          <label>NAME</label>
-          <input type="text" value={form.name} readOnly className="form-control" />
-        </div>
-
-        <div className="mb-3">
-          <label>PHONE</label>
-          <input type="text" value={form.phone} readOnly className="form-control" />
-        </div>
-
-        <div className="mb-3">
-          <label>MESSAGE</label>
-          <input type="text" value={form.message} readOnly className="form-control" />
-        </div>
+        {fields.map((f) => (
+          <div key={f} className="mb-3">
+            <label>{f.toUpperCase()}</label>
+            <input
+              type="text"
+              value={form[f]}
+              readOnly
+              className={`form-control ${
+                activeField === f ? "border border-3 border-success" : ""
+              }`}
+            />
+          </div>
+        ))}
 
         <div className="alert alert-info">{status}</div>
       </div>
