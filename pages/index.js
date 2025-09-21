@@ -9,7 +9,7 @@ export default function VoiceForm() {
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // 🟢 Beep sound
+  // 🟢 Beep sound for listening
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -25,7 +25,7 @@ export default function VoiceForm() {
     } catch {}
   };
 
-  // 🟢 Speak with callback
+  // 🟢 Speak with optional callback
   const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
@@ -40,17 +40,18 @@ export default function VoiceForm() {
 
   const validateInput = (field, value) => {
     if (!value) return false;
-    if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value); // simple username validation
+    if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value);
     return true;
   };
 
   const promptStep = (s) => {
     if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
-    else
+    else {
       speak(
         `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
         startListening
       );
+    }
   };
 
   const handleResult = (raw) => {
@@ -70,8 +71,11 @@ export default function VoiceForm() {
         } else {
           retryRef.current = 0;
           speak(`Skipping ${fields[step]} due to repeated errors.`, () => {
-            setStep((s) => s + 1);
-            promptStep(step + 1);
+            setStep((s) => {
+              const next = s + 1;
+              promptStep(next);
+              return next;
+            });
           });
           return;
         }
@@ -80,14 +84,14 @@ export default function VoiceForm() {
       retryRef.current = 0;
       setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
 
-      // Confirm input before moving
-      speak(
-        `You said: ${transcript}. Saving it as your ${fields[step]}.`,
-        () => {
-          setStep((s) => s + 1);
-          promptStep(step + 1);
-        }
-      );
+      // Auto-confirm and move to next field
+      speak(`You said: ${transcript}.`, () => {
+        setStep((s) => {
+          const next = s + 1;
+          promptStep(next);
+          return next;
+        });
+      });
     } else {
       // Confirmation step
       if (transcript === "yes") handleSubmit();
@@ -111,7 +115,10 @@ export default function VoiceForm() {
       return;
     }
 
-    if (recognitionRef.current) recognitionRef.current.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
 
     const recognition = new SR();
     recognition.lang = "en-US";
@@ -147,10 +154,15 @@ export default function VoiceForm() {
       <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
         <h3 className="text-center mb-3">🎤 Voice Form</h3>
 
-        {fields.map((f) => (
+        {fields.map((f, idx) => (
           <div className="mb-3" key={f}>
             <label>{f.toUpperCase()}</label>
-            <input type="text" value={form[f]} readOnly className="form-control" />
+            <input
+              type="text"
+              value={form[f]}
+              readOnly
+              className={`form-control ${step === idx ? "border-success border-3" : ""}`}
+            />
           </div>
         ))}
 
