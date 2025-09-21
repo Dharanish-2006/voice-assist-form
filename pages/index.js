@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 export default function VoiceForm() {
-  const [form, setForm] = useState({ name: "", email: "", message: "" });
-  const [step, setStep] = useState(0); // 0=name,1=email,2=message,3=confirm
+  const [form, setForm] = useState({ name: "", username: "", message: "" });
+  const [step, setStep] = useState(0); // 0=name,1=username,2=message,3=confirm
   const [status, setStatus] = useState("");
   const recognitionRef = useRef(null);
   const retryRef = useRef(0);
-  const fields = ["name", "email", "message"];
+  const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
   // 🟢 Beep sound
@@ -40,7 +40,7 @@ export default function VoiceForm() {
 
   const validateInput = (field, value) => {
     if (!value) return false;
-    if (field === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value); // simple username validation
     return true;
   };
 
@@ -48,7 +48,7 @@ export default function VoiceForm() {
     if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
     else
       speak(
-        `You entered: Name: ${form.name}, Email: ${form.email}, Message: ${form.message}. Say yes to submit or no to cancel.`,
+        `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
         startListening
       );
   };
@@ -93,7 +93,7 @@ export default function VoiceForm() {
       if (transcript === "yes") handleSubmit();
       else if (transcript === "no") {
         speak("Form submission cancelled. Restarting from beginning.", () => {
-          setForm({ name: "", email: "", message: "" });
+          setForm({ name: "", username: "", message: "" });
           setStep(0);
           promptStep(0);
         });
@@ -132,7 +132,7 @@ export default function VoiceForm() {
   const handleSubmit = () => {
     speak("Form submitted successfully!", () => {
       alert("Form submitted:\n" + JSON.stringify(form, null, 2));
-      setForm({ name: "", email: "", message: "" });
+      setForm({ name: "", username: "", message: "" });
       setStep(0);
       promptStep(0);
     });
@@ -150,7 +150,7 @@ export default function VoiceForm() {
         {fields.map((f) => (
           <div className="mb-3" key={f}>
             <label>{f.toUpperCase()}</label>
-            <input type={f === "email" ? "email" : "text"} value={form[f]} readOnly className="form-control" />
+            <input type="text" value={form[f]} readOnly className="form-control" />
           </div>
         ))}
 
