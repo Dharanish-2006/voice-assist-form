@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", phone: "", message: "" });
-  const [step, setStep] = useState(0); // 0=name,1=phone,2=message,3=confirm
+  const [step, setStep] = useState(0);
   const [status, setStatus] = useState("");
   const [activeField, setActiveField] = useState("");
   const recognitionRef = useRef(null);
@@ -43,8 +43,9 @@ export default function VoiceForm() {
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
-    setActiveField(fields[step]);
-    speak(`Please say your ${fields[step]}`);
+    const currentField = fields[step];
+    setActiveField(currentField);
+    speak(`Please say your ${currentField}`);
 
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript.trim();
@@ -68,17 +69,22 @@ export default function VoiceForm() {
       return;
     }
 
-    // Save the value
+    // Save value
     setForm((prev) => ({ ...prev, [field]: value }));
 
-    // Read back the value
+    // Read back and move to next step after speech finishes
     speak(`${field} recorded as ${value}`, () => {
-      if (step < 2) {
-        setStep((s) => s + 1); // Move to next field
-        startListening(); // start listening for next field
-      } else {
-        confirmSubmit(); // All fields done, go to confirmation
-      }
+      setStep((prevStep) => {
+        if (prevStep < fields.length - 1) {
+          // Move to next field
+          startListening();
+          return prevStep + 1;
+        } else {
+          // All fields done
+          confirmSubmit();
+          return prevStep;
+        }
+      });
     });
   };
 
@@ -122,7 +128,7 @@ export default function VoiceForm() {
   };
 
   useEffect(() => {
-    startListening(); // Start first field
+    startListening();
   }, []);
 
   return (
