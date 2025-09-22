@@ -4,14 +4,13 @@ export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", username: "", message: "" });
   const [step, setStep] = useState(0); // 0=name,1=username,2=message,3=confirm
   const [status, setStatus] = useState("");
-  const [started, setStarted] = useState(false);
   const recognitionRef = useRef(null);
   const retryRef = useRef(0);
 
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // Beep sound
+  // 🟢 Beep sound before listening
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -27,7 +26,7 @@ export default function VoiceForm() {
     } catch {}
   };
 
-  // Speak text with optional callback
+  // 🟢 Speak text with optional callback
   const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
@@ -40,15 +39,18 @@ export default function VoiceForm() {
     setStatus(text);
   };
 
+  // 🔹 Validate input
   const validateInput = (field, value) => {
     if (!value) return false;
     if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value);
     return true;
   };
 
+  // 🔹 Prompt current step
   const promptStep = (s) => {
-    if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
-    else {
+    if (s < 3) {
+      speak(`Please say your ${fields[s]}.`, startListening);
+    } else {
       speak(
         `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
         startListening
@@ -56,6 +58,7 @@ export default function VoiceForm() {
     }
   };
 
+  // 🔹 Handle recognition result
   const handleResult = (raw) => {
     const transcript = raw.toLowerCase().trim();
 
@@ -86,7 +89,6 @@ export default function VoiceForm() {
       retryRef.current = 0;
       setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
 
-      // Read back dynamically and move to next field
       speak(`You said: ${transcript}`, () => {
         setStep((s) => {
           const next = s + 1;
@@ -94,8 +96,13 @@ export default function VoiceForm() {
           return next;
         });
       });
-    } else {
-      // Confirmation step
+    } else if (step === 3) {
+      // 🔹 Confirmation step
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+
       if (transcript === "yes") handleSubmit();
       else if (transcript === "no") {
         speak("Form submission cancelled. Restarting from beginning.", () => {
@@ -109,6 +116,7 @@ export default function VoiceForm() {
     }
   };
 
+  // 🔹 Start speech recognition
   const startListening = () => {
     if (typeof window === "undefined") return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -124,25 +132,21 @@ export default function VoiceForm() {
 
     const recognition = new SR();
     recognition.lang = "en-US";
-    recognition.interimResults = true; // live updates
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = beep;
 
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript;
-
-      // 🔹 Always update the current step dynamically
-      setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
-
-      // Move to next only if speech is final
-      if (e.results[0].isFinal) handleResult(transcript);
+      handleResult(transcript);
     };
 
     recognitionRef.current = recognition;
     recognition.start();
   };
 
+  // 🔹 Handle form submission
   const handleSubmit = () => {
     speak("Form submitted successfully!", () => {
       alert("Form submitted:\n" + JSON.stringify(form, null, 2));
@@ -152,39 +156,30 @@ export default function VoiceForm() {
     });
   };
 
+  // 🔹 Start first prompt on mount
+  useEffect(() => {
+    speak("Welcome! Let's fill your form using voice.", () => promptStep(0));
+  }, []);
+
   return (
-    <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center bg-light">
-      {!started && (
-        <button
-          className="btn btn-primary mb-4"
-          onClick={() => {
-            setStarted(true);
-            promptStep(0);
-          }}
-        >
-          🎤 Start Voice Form
-        </button>
-      )}
+    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
+      <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
+        <h3 className="text-center mb-3">🎤 Voice Form</h3>
 
-      {started && (
-        <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
-          <h3 className="text-center mb-3">🎤 Voice Form</h3>
+        {fields.map((f, idx) => (
+          <div className="mb-3" key={f}>
+            <label>{f.toUpperCase()}</label>
+            <input
+              type="text"
+              value={form[f]}
+              readOnly
+              className={`form-control ${step === idx ? "border-success border-3" : ""}`}
+            />
+          </div>
+        ))}
 
-          {fields.map((f, idx) => (
-            <div className="mb-3" key={f}>
-              <label>{f.toUpperCase()}</label>
-              <input
-                type="text"
-                value={form[f]}
-                readOnly
-                className={`form-control ${step === idx ? "border-success border-3" : ""}`}
-              />
-            </div>
-          ))}
-
-          <div className="alert alert-info">{status}</div>
-        </div>
-      )}
+        <div className="alert alert-info">{status}</div>
+      </div>
     </div>
   );
 }
