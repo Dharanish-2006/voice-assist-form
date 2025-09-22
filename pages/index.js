@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 
 export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", username: "", message: "" });
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(0); // 0=name,1=username,2=message,3=confirm
   const [status, setStatus] = useState("");
+  const [started, setStarted] = useState(false);
   const recognitionRef = useRef(null);
   const retryRef = useRef(0);
 
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // 🟢 Beep sound
+  // 🟢 Beep sound for listening
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -26,6 +27,7 @@ export default function VoiceForm() {
     } catch {}
   };
 
+  // 🟢 Speak with optional callback
   const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
@@ -68,8 +70,7 @@ export default function VoiceForm() {
     };
 
     recognition.onend = () => {
-      // Automatically restart unless form is done
-      if (step <= 3) recognition.start();
+      if (started && step <= 3) recognition.start(); // Keep listening
     };
 
     recognitionRef.current = recognition;
@@ -77,11 +78,10 @@ export default function VoiceForm() {
   };
 
   const promptStep = (s) => {
-    if (s < 3) speak(`Please say your ${fields[s]}.`, startRecognition);
+    if (s < 3) speak(`Please say your ${fields[s]}.`);
     else
       speak(
-        `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
-        startRecognition
+        `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`
       );
   };
 
@@ -130,15 +130,21 @@ export default function VoiceForm() {
     setStep(0);
   };
 
-  useEffect(() => {
-    // Start voice automatically after initial click
+  const startVoiceForm = () => {
+    setStarted(true);
     speak("Welcome! Let's fill your form using voice.", startRecognition);
-  }, []);
+  };
 
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
       <div className="card p-4 shadow" style={{ maxWidth: "500px" }}>
         <h3 className="text-center mb-3">🎤 Voice Form</h3>
+
+        {!started && (
+          <button className="btn btn-primary w-100 mb-3" onClick={startVoiceForm}>
+            🎤 Start Voice Form
+          </button>
+        )}
 
         {fields.map((f, idx) => (
           <div className="mb-3" key={f}>
