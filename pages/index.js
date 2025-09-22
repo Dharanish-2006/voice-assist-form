@@ -4,13 +4,14 @@ export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", username: "", message: "" });
   const [step, setStep] = useState(0); // 0=name,1=username,2=message,3=confirm
   const [status, setStatus] = useState("");
-  const [started, setStarted] = useState(false); // user gesture to start
+  const [started, setStarted] = useState(false);
   const recognitionRef = useRef(null);
   const retryRef = useRef(0);
+
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // 🟢 Beep sound
+  // Beep sound to indicate listening
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -26,7 +27,7 @@ export default function VoiceForm() {
     } catch {}
   };
 
-  // 🟢 Speak with callback
+  // Speak text with optional callback
   const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
@@ -39,12 +40,13 @@ export default function VoiceForm() {
     setStatus(text);
   };
 
+  // Simple validation
   const validateInput = (field, value) => {
     if (!value) return false;
-    if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value);
     return true;
   };
 
+  // Prompt current step
   const promptStep = (s) => {
     if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
     else {
@@ -55,6 +57,7 @@ export default function VoiceForm() {
     }
   };
 
+  // Handle speech recognition result
   const handleResult = (raw) => {
     const transcript = raw.toLowerCase().trim();
 
@@ -85,8 +88,8 @@ export default function VoiceForm() {
       retryRef.current = 0;
       setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
 
-      // Auto-confirm and move to next field
-      speak(`You said: ${transcript}.`, () => {
+      // Read back dynamically
+      speak(`You said: ${transcript}`, () => {
         setStep((s) => {
           const next = s + 1;
           promptStep(next);
@@ -108,6 +111,7 @@ export default function VoiceForm() {
     }
   };
 
+  // Start listening
   const startListening = () => {
     if (typeof window === "undefined") return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -123,14 +127,15 @@ export default function VoiceForm() {
 
     const recognition = new SR();
     recognition.lang = "en-US";
-    recognition.interimResults = false;
+    recognition.interimResults = true; // Live dynamic input
     recognition.maxAlternatives = 1;
 
     recognition.onstart = beep;
 
     recognition.onresult = (e) => {
       const transcript = e.results[0][0].transcript;
-      handleResult(transcript);
+      setForm((prev) => ({ ...prev, [fields[step]]: transcript })); // dynamic live update
+      if (e.results[0].isFinal) handleResult(transcript); // move to next field only on final
     };
 
     recognitionRef.current = recognition;
