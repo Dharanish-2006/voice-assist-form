@@ -133,14 +133,38 @@ export default function VoiceForm() {
     }
   };
 
-  const handleSubmit = () => {
-    speak("Form submitted successfully!", () => {
+  // const handleSubmit = () => {
+  //   speak("Form submitted successfully!", () => {
+  //     alert("Form submitted:\n" + JSON.stringify(form, null, 2));
+  //     setForm({ name: "", username: "", message: "" });
+  //     setStep(0);
+  //     promptStep(0);
+  //   });
+  // };
+  const handleSubmit = async () => {
+  try {
+    speak("Submitting your form, please wait...");
+    const res = await fetch("/api/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+
+    if (res.ok) {
+      speak("Form submitted successfully!");
       alert("Form submitted:\n" + JSON.stringify(form, null, 2));
       setForm({ name: "", username: "", message: "" });
       setStep(0);
-      promptStep(0);
-    });
-  };
+    } else {
+      speak("Failed to submit form.");
+      alert("Error submitting form");
+    }
+  } catch (err) {
+    console.error(err);
+    speak("Error submitting form.");
+  }
+};
+
 
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
