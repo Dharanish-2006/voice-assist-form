@@ -10,7 +10,7 @@ export default function VoiceForm() {
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // Beep when listening
+  // Beep sound
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -39,12 +39,14 @@ export default function VoiceForm() {
     setStatus(text);
   };
 
+  // Validate input
   const validateInput = (field, value) => {
     if (!value) return false;
     if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value);
     return true;
   };
 
+  // Start speech recognition
   const startListening = () => {
     if (typeof window === "undefined") return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -69,21 +71,27 @@ export default function VoiceForm() {
 
     recognition.onend = () => {
       recognitionRef.current = null;
+      // Keep listening automatically if not at confirmation step
+      if (step < 3) startListening();
     };
 
     recognitionRef.current = recognition;
     recognition.start();
   };
 
+  // Prompt user for current step
   const promptStep = (s) => {
-    if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
-    else
+    if (s < 3) {
+      speak(`Please say your ${fields[s]}.`, startListening);
+    } else {
       speak(
-        `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
+        `You entered Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
         startListening
       );
+    }
   };
 
+  // Handle recognition result
   const handleResult = (transcript) => {
     if (transcript === "repeat") {
       promptStep(step);
@@ -111,6 +119,8 @@ export default function VoiceForm() {
 
       retryRef.current = 0;
       setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
+
+      // Move to next step
       speak(`You said: ${transcript}.`, () => {
         setStep((s) => {
           const next = s + 1;
@@ -122,7 +132,7 @@ export default function VoiceForm() {
       // Confirmation step
       if (transcript === "yes") handleSubmit();
       else if (transcript === "no") {
-        speak("Form submission cancelled. Restarting from beginning.", () => {
+        speak("Form submission cancelled. Restarting.", () => {
           setForm({ name: "", username: "", message: "" });
           setStep(0);
           promptStep(0);
@@ -133,38 +143,30 @@ export default function VoiceForm() {
     }
   };
 
-  // const handleSubmit = () => {
-  //   speak("Form submitted successfully!", () => {
-  //     alert("Form submitted:\n" + JSON.stringify(form, null, 2));
-  //     setForm({ name: "", username: "", message: "" });
-  //     setStep(0);
-  //     promptStep(0);
-  //   });
-  // };
+  // Submit to MongoDB via API
   const handleSubmit = async () => {
-  try {
-    speak("Submitting your form, please wait...");
-    const res = await fetch("/api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    try {
+      speak("Submitting your form, please wait...");
+      const res = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
 
-    if (res.ok) {
-      speak("Form submitted successfully!");
-      alert("Form submitted:\n" + JSON.stringify(form, null, 2));
-      setForm({ name: "", username: "", message: "" });
-      setStep(0);
-    } else {
-      speak("Failed to submit form.");
-      alert("Error submitting form");
+      if (res.ok) {
+        speak("Form submitted successfully!");
+        alert("Form submitted:\n" + JSON.stringify(form, null, 2));
+        setForm({ name: "", username: "", message: "" });
+        setStep(0);
+      } else {
+        speak("Failed to submit form.");
+        alert("Error submitting form.");
+      }
+    } catch (err) {
+      console.error(err);
+      speak("Error submitting form.");
     }
-  } catch (err) {
-    console.error(err);
-    speak("Error submitting form.");
-  }
-};
-
+  };
 
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
@@ -172,13 +174,16 @@ export default function VoiceForm() {
         <h3 className="text-center mb-3">🎤 Voice Form</h3>
 
         {/* Start button */}
-        {step === 0 && form.name === "" && form.username === "" && form.message === "" && (
-          <div className="text-center mb-3">
-            <button className="btn btn-primary" onClick={() => promptStep(0)}>
-              🎤 Start Voice Form
-            </button>
-          </div>
-        )}
+        {step === 0 &&
+          form.name === "" &&
+          form.username === "" &&
+          form.message === "" && (
+            <div className="text-center mb-3">
+              <button className="btn btn-primary" onClick={() => promptStep(0)}>
+                🎤 Start Voice Form
+              </button>
+            </div>
+          )}
 
         {fields.map((f, idx) => (
           <div className="mb-3" key={f}>
