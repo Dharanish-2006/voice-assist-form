@@ -11,7 +11,6 @@ export default function VoiceForm() {
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // 🟢 Beep sound for listening
   const beep = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -27,7 +26,6 @@ export default function VoiceForm() {
     } catch {}
   };
 
-  // 🟢 Speak with optional callback
   const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
@@ -54,13 +52,15 @@ export default function VoiceForm() {
       return;
     }
 
-    if (recognitionRef.current) return; // Already running
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
 
     const recognition = new SR();
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = true;
 
     recognition.onstart = beep;
 
@@ -70,7 +70,8 @@ export default function VoiceForm() {
     };
 
     recognition.onend = () => {
-      if (started && step <= 3) recognition.start(); // Keep listening
+      // Restart automatically after each result if form not finished
+      if (started && step <= 3) recognition.start();
     };
 
     recognitionRef.current = recognition;
@@ -78,11 +79,13 @@ export default function VoiceForm() {
   };
 
   const promptStep = (s) => {
-    if (s < 3) speak(`Please say your ${fields[s]}.`);
-    else
+    if (s < 3) {
+      speak(`Please say your ${fields[s]}.`);
+    } else {
       speak(
         `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`
       );
+    }
   };
 
   const handleResult = (transcript) => {
@@ -99,16 +102,20 @@ export default function VoiceForm() {
           return;
         } else {
           retryRef.current = 0;
-          speak(`Skipping ${fields[step]} due to repeated errors.`);
-          setStep((s) => s + 1);
+          speak(`Skipping ${fields[step]} due to repeated errors.`, () => {
+            const nextStep = step + 1;
+            setStep(nextStep);
+            promptStep(nextStep);
+          });
           return;
         }
       }
 
       retryRef.current = 0;
       setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
-      speak(`You said: ${transcript}.`);
-      setStep((s) => s + 1);
+      const nextStep = step + 1;
+      setStep(nextStep);
+      speak(`You said: ${transcript}.`, () => promptStep(nextStep));
     } else {
       // Confirmation
       if (transcript === "yes") handleSubmit();
@@ -116,6 +123,7 @@ export default function VoiceForm() {
         speak("Form submission cancelled. Restarting from beginning.", () => {
           setForm({ name: "", username: "", message: "" });
           setStep(0);
+          promptStep(0);
         });
       } else {
         speak("Please say yes or no.");
