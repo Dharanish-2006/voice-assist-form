@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from "react";
 
 export default function VoiceForm() {
   const [form, setForm] = useState({ name: "", username: "", message: "" });
-  const [step, setStep] = useState(0); // 0=name,1=username,2=message,3=confirm
+  const [step, setStep] = useState(0);
   const [status, setStatus] = useState("");
   const recognitionRef = useRef(null);
   const retryRef = useRef(0);
   const fields = ["name", "username", "message"];
   const MAX_RETRIES = 2;
 
-  // 🟢 Beep sound for listening
+  // 🟢 Beep sound
   const beep = () => {
+    if (typeof window === "undefined") return;
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = ctx.createOscillator();
@@ -25,7 +26,7 @@ export default function VoiceForm() {
     } catch {}
   };
 
-  // 🟢 Speak with optional callback
+  // 🟢 Speak with callback
   const speak = (text, cb = null) => {
     if (typeof window === "undefined") return;
     const synth = window.speechSynthesis;
@@ -40,18 +41,16 @@ export default function VoiceForm() {
 
   const validateInput = (field, value) => {
     if (!value) return false;
-    if (field === "username") return /^[a-zA-Z0-9_]{3,20}$/.test(value);
     return true;
   };
 
   const promptStep = (s) => {
     if (s < 3) speak(`Please say your ${fields[s]}.`, startListening);
-    else {
+    else
       speak(
         `You entered: Name: ${form.name}, Username: ${form.username}, Message: ${form.message}. Say yes to submit or no to cancel.`,
         startListening
       );
-    }
   };
 
   const handleResult = (raw) => {
@@ -84,7 +83,6 @@ export default function VoiceForm() {
       retryRef.current = 0;
       setForm((prev) => ({ ...prev, [fields[step]]: transcript }));
 
-      // Auto-confirm and move to next field
       speak(`You said: ${transcript}.`, () => {
         setStep((s) => {
           const next = s + 1;
@@ -93,7 +91,6 @@ export default function VoiceForm() {
         });
       });
     } else {
-      // Confirmation step
       if (transcript === "yes") handleSubmit();
       else if (transcript === "no") {
         speak("Form submission cancelled. Restarting from beginning.", () => {
@@ -115,7 +112,9 @@ export default function VoiceForm() {
       return;
     }
 
+    // Stop previous recognition if exists
     if (recognitionRef.current) {
+      recognitionRef.current.onresult = null;
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
@@ -132,6 +131,10 @@ export default function VoiceForm() {
       handleResult(transcript);
     };
 
+    recognition.onend = () => {
+      recognitionRef.current = null; // clean up
+    };
+
     recognitionRef.current = recognition;
     recognition.start();
   };
@@ -146,7 +149,10 @@ export default function VoiceForm() {
   };
 
   useEffect(() => {
-    speak("Welcome! Let's fill your form using voice.", promptStep.bind(null, 0));
+    // Only run on client
+    if (typeof window !== "undefined") {
+      speak("Welcome! Let's fill your form using voice.", promptStep.bind(null, 0));
+    }
   }, []);
 
   return (
@@ -170,4 +176,4 @@ export default function VoiceForm() {
       </div>
     </div>
   );
-}
+};
